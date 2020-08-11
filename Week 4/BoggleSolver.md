@@ -6,10 +6,10 @@ import edu.princeton.cs.algs4.TrieST;
  * the solver itself is a trie (dictionary)
  */
 public class BoggleSolver {
-    private final String[] dict; 
-    private final int[] scores; 
+    private static final int R = 26; // number of uppercase characters
     private int row;
     private int col;
+    private Node root;      // root of trie
     private TrieST<Boolean> validWordTrie;
     private BoggleBoard board;
     private boolean[][] marked;
@@ -21,10 +21,8 @@ public class BoggleSolver {
         if (dictionary == null) {
             throw new IllegalArgumentException();
         }
-        dict = dictionary; 
-        scores = new int[dict.length]; 
         for (int i = 0; i < dictionary.length; ++i) {
-            scores[i] = getScore(dict[i]); 
+            put(dictionary[i], getScore(dictionary[i]));
         }
     }
 
@@ -40,60 +38,45 @@ public class BoggleSolver {
         marked = new boolean[row][col];
         for (int i = 0; i < row; ++i) {
             for (int j = 0; j < col; ++j) {
-                dfs(i, j, new StringBuilder(), 0, 0, dict.length - 1);
+                dfs(root, i, j, new StringBuilder());
             }
         }
         return validWordTrie.keysWithPrefix("");
     }
 
-    private void dfs(int i, int j, StringBuilder prefix, int d, int lo, int hi) {
+    private void dfs(Node pre, int i, int j, StringBuilder prefix) {
         if (!validateCoord(i, j) || marked[i][j]) {
             return;
         }
-        boolean isQ = false;
         char c = board.getLetter(i, j);
-        if (c == 'Q') {
-            isQ = true;
-            while ((dict[lo].length() < d + 1 || dict[lo].charAt(d) < c) && lo <= hi) {
-                ++lo;
-            }
-            while ((dict[hi].length() >= d + 1 && dict[hi].charAt(d) > c) && lo <= hi) {
-                --hi;
-            }
-            if (lo > hi || dict[lo].charAt(d) > c || dict[hi].charAt(d) < c) {
-                return;
-            }
-            d += 1;
-            c = 'U';
-        }
-        while ((dict[lo].length() < d + 1 || dict[lo].charAt(d) < c) && lo <= hi) {
-            ++lo;
-        }
-        while ((dict[hi].length() >= d + 1 && dict[hi].charAt(d) > c) && lo <= hi) {
-            --hi;
-        }
-        if (lo > hi || dict[lo].charAt(d) > c || dict[hi].charAt(d) < c) {
+        Node x = pre.next[c - 'A'];
+        if (x == null) { // if the dictionary doesn't contain such a prefix, then there is no need to go forward
             return;
         }
-        marked[i][j] = true;
-        if (isQ) {
-            prefix.append('Q').append('U');
+        if (c == 'Q') { // special case 'Q'
+            x = x.next['U' - 'A'];
+            if (x == null) {
+                return;
+            }
+            prefix.append(c).append('U');
         }
         else {
             prefix.append(c);
         }
+        marked[i][j] = true;
         String s = prefix.toString();
-        // if (s.equals(dict[lo])) {
-        if (d > 1 && dict[lo].length() == d + 1) {
+        if (contains(s)) {
             validWordTrie.put(s, true);
         }
-        
+
         for (int di = -1; di <= 1; ++di) { // go deeper
             for (int dj = -1; dj <= 1; ++dj) {
-                dfs(i + di, j + dj, prefix, d + 1, lo, hi);
+                dfs(x, i + di, j + dj, prefix);
             }
         }
-        if (isQ) {
+
+        // restore StringBuilder and mark
+        if (c == 'Q') {
             prefix.delete(prefix.length() - 2, prefix.length());
         }
         else {
@@ -115,28 +98,11 @@ public class BoggleSolver {
         if (word == null) {
             throw new IllegalArgumentException();
         }
-        int idx = contains(word);
-        if (word.length() < 3 || idx < 0) {
+        Node x = getNode(word);
+        if (x == null || x.val == 0) {
             return 0;
         }
-        return scores[idx];
-    }
-
-    private int contains(String word) {
-        if (word == null) {
-            throw new IllegalArgumentException();
-        }
-        int lo = 0;
-        int hi = dict.length - 1;
-        int mid, cmp;
-        while (lo <= hi) {
-            mid = lo + (hi - lo)/2;
-            cmp = dict[mid].compareTo(word);
-            if (cmp > 0) hi = mid - 1;
-            else if (cmp < 0) lo = mid + 1;
-            else return mid;
-        }
-        return -1;
+        return x.val;
     }
 
     private int getScore(String s) {
@@ -161,6 +127,50 @@ public class BoggleSolver {
             score = 11;
         }
         return score;
+    }
+
+    private static class Node { // trie
+        private int val;
+        private Node[] next = new Node[R];
+    }
+
+    private int get(String key) { // trie
+        if (key == null) throw new IllegalArgumentException();
+        Node x = get(root, key, 0);
+        if (x == null) return 0;
+        return x.val;
+    }
+
+    private Node getNode(String key) { // trie
+        return get(root, key, 0);
+    }
+
+    private boolean contains(String key) { // trie
+        if (key == null) throw new IllegalArgumentException();
+        return get(key) != 0;
+    }
+
+    private Node get(Node x, String key, int d) { // trie
+        if (x == null) return null;
+        if (d == key.length()) return x;
+        int c = key.charAt(d) - 'A';
+        return get(x.next[c], key, d+1);
+    }
+
+    private void put(String key, int val) { // trie
+        if (key == null) throw new IllegalArgumentException();
+        root = put(root, key, val, 0);
+    }
+
+    private Node put(Node x, String key, int val, int d) { // trie
+        if (x == null) x = new Node();
+        if (d == key.length()) {
+            x.val = val;
+            return x;
+        }
+        int c = key.charAt(d) - 'A';
+        x.next[c] = put(x.next[c], key, val, d+1);
+        return x;
     }
 
     public static void main(String[] args) {
